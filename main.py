@@ -5,7 +5,7 @@ from models import LanguageDataset, GenderedLSTM
 
 
 if __name__ == "__main__":
-    with open("french.csv") as f:
+    with open("french_clean.txt") as f:
         text = f.readlines()
 
     # Hyperparameters model
@@ -39,4 +39,5 @@ if __name__ == "__main__":
                 dataset, sampler=SubsetRandomSampler(val_indices), batch_size=batch_size
     )
 
-    print(dataset.labels)
+    model = GenderedLSTM(train_dataloader, )
+    model.train(train_dataloader, val_dataloader, 20, 32, device='cuda')

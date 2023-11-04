@@ -19,12 +19,10 @@ class LanguageDataset(Dataset):
         self.longest_noun = 0
 
         idx = 0
-        for word in self.data:
-            word_list = word.split(",")
-            noun = word_list[1]
+        for tup in data:
+            noun, label = tup.strip().split(",")
             if len(noun) > self.longest_noun:
                 self.longest_noun = len(noun)
-            label = word_list[2]
             for char in noun:
                 if char not in self.char2idx:
                     self.char2idx[char] = idx
@@ -44,16 +42,16 @@ class LanguageDataset(Dataset):
 
 class GenderedLSTM(nn.Module):
 
-    def __init__(self, embedding_dim, hidden_dim, vocab_size, tagset_size):
+    def __init__(self, traingenerator, embedding_dim, hidden_dim, vocab_size, tagset_size):
         super(GenderedLSTM, self).__init__()
         self.embedding_dim = embedding_dim
         self.hidden_dim = hidden_dim
         self.vocab_size = vocab_size
         self.tagset_size = tagset_size
-        self.allocate_params()
+        self.allocate_params(traingenerator)
 
 
-    def allocate_params(self):
+    def allocate_params(self, datagenerator):
 
         self.word_embeddings = nn.Embedding(self.vocab_size, self.embedding_dim)
 
@@ -69,7 +67,7 @@ class GenderedLSTM(nn.Module):
         tag_score = F.log_softmax(tag_space, dim=1)
         return tag_score
     
-    def train(self, learning_rate=0.1):
+    def train(self, traingenerator, validgenerator, epochs, batch_size, device='cuda', learning_rate=0.1):
 
         loss_function = nn.NLLLoss()
         optimizer = optim.Adam(self.parameters(), lr=learning_rate)
