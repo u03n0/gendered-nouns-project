@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 from torch.utils.data import  DataLoader, SubsetRandomSampler
-from models import LanguageDataset, GenderedLSTM
+from src.models import LanguageDataset, GenderedLSTM
 
 
 if __name__ == "__main__":
