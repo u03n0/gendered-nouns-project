@@ -5,6 +5,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.data import Dataset
+from sklearn.preprocessing import LabelEncoder
+
 
 
 class LanguageDataset(Dataset):
@@ -38,7 +40,34 @@ class LanguageDataset(Dataset):
     def __getitem__(self, idx):
         pass
 
+class NounDataset(Dataset):
+    def __init__(self, X, y, tokenizer, max_length):
+        self.X = X
+        self.tokenizer = tokenizer
+        self.max_length = max_length
+        self.le = LabelEncoder()
+        self.y = self.le.fit_transform(y)
 
+
+    def __len__(self):
+        return len(self.X)
+
+    def __getitem__(self, idx):
+        text = self.X[idx]
+        label = torch.tensor(self.y[idx])
+
+        encoded_text = self.tokenizer(
+            text,
+            truncation=True,
+            padding='max_length',
+            max_length=self.max_length,
+            return_tensors='pt'
+        )
+        return  {
+        'input_ids': encoded_text['input_ids'].squeeze(),
+        'attention_mask': encoded_text['attention_mask'].squeeze(),
+        'label': label
+    }
 
 class GenderedLSTM(nn.Module):
 
@@ -68,11 +97,7 @@ class GenderedLSTM(nn.Module):
         return tag_score
     
     def train_lstm(self, traingenerator, validgenerator, epochs, batch_size, device='cuda', learning_rate=0.1):
-
-        loss_function = nn.NLLLoss()
-        optimizer = optim.Adam(self.parameters(), lr=learning_rate)
-        # with torch.no_grad():
-        #     inputs = 
+        pass
 
 
 class GenderedCNN(nn.Module):
@@ -215,3 +240,71 @@ class GenderedCNN(nn.Module):
         gradcam = (gradcam - gradcam.min()) / (gradcam.max() - gradcam.min())
 
         return gradcam.squeeze()
+# BERT 
+class GenderBert(nn.Module):
+    def __init__(self, embedding_dim, hidden_dim, vocab_size, tagset_size, epochs, model, device='cuda'):
+        super(GenderBert, self).__init__()
+        self.embedding_dim = embedding_dim
+        self.hidden_dim = hidden_dim
+        self.vocab_size = vocab_size
+        self.tagset_size = tagset_size
+        self.epochs = epochs
+        self.device = device
+        self.model = model
+
+        
+
+    def train(self, train_loader, save_model=True):
+        
+        # Define the optimizer and loss function
+        optimizer = torch.optim.Adam(self.model.parameters(), lr=1e-5)
+        criterion = torch.nn.CrossEntropyLoss()
+
+        num_epochs = self.epochs
+        self.model.to(self.device)
+        for epoch in range(num_epochs):
+            for batch in train_loader:
+                input_ids = batch['input_ids'].to(self.device)
+                attention_mask = batch['attention_mask'].to(self.device)
+                labels = batch['label'].squeeze().long().to(self.device)  # Ensure labels are of type long
+                optimizer.zero_grad()
+
+                outputs = self.model(input_ids, attention_mask=attention_mask)
+                logits = outputs.logits
+
+                loss = criterion(logits, labels)
+                loss.backward()
+                optimizer.step()
+
+            print(f'Epoch {epoch + 1}/{num_epochs}, Loss: {loss.item()}')
+        if save_model:
+            torch.save(self.model.state_dict(), 'saved_models/GenderBert_params.pt')
+            print(f"Successfully saved model")
+
+    def predict(self, test_loader):
+        # Evaluation
+        # self.model.eval()  # Set the model to evaluation mode
+        correct = 0
+        total = 0
+
+        with torch.no_grad():
+            for batch in test_loader:
+                input_ids = batch['input_ids'].to(self.device)
+                attention_mask = batch['attention_mask'].to(self.device)
+                labels = batch['label'].to(self.device)
+
+                # Move the model's parameters to the same device
+                self.model.to(self.device)
+
+                # Forward pass
+                outputs = self.model(input_ids, attention_mask=attention_mask)
+                logits = outputs.logits
+                _, predicted = torch.max(logits, 1)
+
+                total += labels.size(0)
+                correct += (predicted == labels).sum().item()
+
+        accuracy = correct / total
+        print(f'Test Accuracy: {accuracy * 100:.2f}%')
+        return accuracy
+
