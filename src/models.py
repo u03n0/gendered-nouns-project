@@ -167,4 +167,51 @@ class GenderedCNN(nn.Module):
                   f'Validation Loss: {avg_val_loss:.4f}, Validation Accuracy: {val_accuracy:.4f}')
 
 
-   
+    def get_gradcam(self, input_tensor, target_class):
+        # Set up hooks to capture intermediate activations and gradients
+        activations = []
+        gradients = []
+
+        def foward_hook(module, input, output):
+            activations.append(output)
+
+        def backward_hook(module, grad_input, grad_output):
+            gradients.append(grad_output[0])
+
+        # Register hooks on the last convolutional layer
+        hook_handles = []
+        target_layer = None
+
+        for layer in reversed(self.features.childent()):
+            if isinstance(layer, nn.Conv2d):
+                target_layer = layer
+                break
+        
+        hook_handles.append(target_layer.register_forward_hook(foward_hook))
+        hook_handles.append(target_layer.register_backward_hook(backward_hook))
+
+        # Foward pass
+        logits = self(input_tensor)
+
+        # Backward pass to compute gradients
+        logits.backward()
+
+        # Remove hooks
+        for handle in hook_handles:
+            handle.remove()
+
+        # Compute Grad-CAM
+        gradients = gradients[0] # Take the first element of the list (the only one)
+        activations = activations[0] # Take the first element of the list
+
+        weights = torch.mean(gradients, dim=(2,3), keepdim=True)
+        gradcam = torch.sum(weights * activations, dim=1, keepdim=True)
+        gradcam = F.relu(gradcam)
+
+        # Resize Grad-CAM to match the input size
+        gradcam = F.interpolate(gradcam, size=input_tensor.shape[2:], mode='bilinear', align_corners=False)
+
+        # Normalize to [0, 1]
+        gradcam = (gradcam - gradcam.min()) / (gradcam.max() - gradcam.min())
+
+        return gradcam.squeeze()
