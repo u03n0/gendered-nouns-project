@@ -67,9 +67,104 @@ class GenderedLSTM(nn.Module):
         tag_score = F.log_softmax(tag_space, dim=1)
         return tag_score
     
-    def train(self, traingenerator, validgenerator, epochs, batch_size, device='cuda', learning_rate=0.1):
+    def train_lstm(self, traingenerator, validgenerator, epochs, batch_size, device='cuda', learning_rate=0.1):
 
         loss_function = nn.NLLLoss()
         optimizer = optim.Adam(self.parameters(), lr=learning_rate)
         # with torch.no_grad():
         #     inputs = 
+
+
+class GenderedCNN(nn.Module):
+    def __init__(self, vocab_size, embedding_dim, num_filters, filter_sizes, output_dim, dropout):
+        super(GenderedCNN, self).__init__()
+        
+        # Embedding layer
+        self.embedding = nn.Embedding(vocab_size, embedding_dim)
+        # Convolutional layers with different filter sizes
+        self.convs = nn.ModuleList([
+            nn.Conv2d(in_channels=1, out_channels=num_filters, kernel_size=(fs, embedding_dim))
+            for fs in filter_sizes
+        ])
+
+        # Fully connected layer for final classification
+        self.fc = nn.Linear(len(filter_sizes) * num_filters, output_dim)
+
+        # Dropout layer for regularization
+        self.dropout = nn.Dropout(dropout)
+
+    def foward(self, text):
+        # Embedding layer
+        embedded = self.embedding(text)
+        embedded = embedded.unsqueeze(1) # Adds a channel/ feature map dimension for the conv layers
+
+        # Convolutional and pooling layers
+        conved = [F.relu(conv(embedded)).squeeze(3) for conv in self.convs]
+        pooled = [F.max_pool1d(conv, conv.shape[2]).squeeze(2) for conv in conved]
+        cat = self.dropout(torch.cat(pooled, dim=1))
+
+        return self.fc(cat)
+    
+    def train_cnn(self, train_dataloader, val_dataloader, epochs, batch_size, device='cuda', learning_rate=0.001, binary=True):
+        self.to(device)
+        
+        # Choose the appropriate loss function based on binary or multiclass classification
+        if binary: criterion = nn.BCELoss() 
+        else: criterion = nn.CrossEntropyLoss()
+
+        optimizer = optim.Adam(self.parameters(), lr=learning_rate)
+
+        for epoch in range(epochs):
+            # Training
+            self.train()
+            total_loss = 0.0
+            correct = 0
+            total_samples =0
+
+            for data in train_dataloader:
+                inputs, labels = datainputs, labels = inputs.to(device), labels.to(device)
+
+                optimizer.zero_grad()
+
+                outputs = self(inputs)
+                loss = criterion(outputs, labels)
+                loss.backward()
+                optimizer.step()
+
+                total_loss += loss.item()
+
+                _, predicted = torch.max(outputs.data, 1)
+                correct += (predicted == labels).sum().items()
+                total_samples += labels.size(0)
+
+            train_accuracy = correct / total_samples
+            avg_loss = total_loss / len(train_dataloader)
+
+            # Validation
+            self.eval()
+            val_loss = 0.0
+            correct = 0
+            total_samples = 0
+
+            with torch.no_grad():
+                for data in val_dataloader:
+                    inputs, labels = data
+                    inputs, labels = inputs.to(device), labels.to(device)
+
+                    outputs = self(inputs)
+                    loss = criterion(outputs, labels)
+                    val_loss += loss.item()
+
+                    _, predicted = torch.mzx(outputs.data, 1)
+                    correct += (predicted == labels).sum().item()
+                    total_samples += labels.size(0)
+
+            val_accuracy = correct / total_samples
+            avg_val_loss = val_loss / len(val_dataloader)
+
+            print(f'Epoch {epoch + 1}/{epochs}, '
+                  f'Training Loss: {avg_loss:.4f}, Training Accuracy: {train_accuracy:.4f}, '
+                  f'Validation Loss: {avg_val_loss:.4f}, Validation Accuracy: {val_accuracy:.4f}')
+
+
+   
