@@ -1,6 +1,8 @@
 HYPERPARAMETERS = {
     'bert': {
         'epochs': 5,
+        'lr':1e-5,
+        'num_lables': 2,
     },
 
     'lstm': {

@@ -1,4 +1,6 @@
 import torch
+import time
+import json
 
 from typing import Dict, List, Tuple
 from pathlib import Path
@@ -28,9 +30,9 @@ def get_x_y_from(df):
     return df['noun'].tolist(), df['gender'].tolist()
 
 
-def initialize_classifier(model_name, hyperparameters):
+def initialize_classifier(model_name, num_labels):
     MODEL_DICT = {
-        'bert': GenderBert(**hyperparameters),
+        'bert': GenderBert(num_labels),
         # 'cnn': GenderedCNN(**hyperparameters)
     }
     return MODEL_DICT[model_name]
@@ -57,10 +59,10 @@ def get_pretrained_file(args, model_):
     return Path(folder_path) / file_name
 
 
-def load_pretrained_model(model_name, hyperparameters, path):
-    clf = initialize_classifier(model_name, hyperparameters)
+def load_pretrained_model(model_name, path):
+    clf = initialize_classifier(model_name, 2)
     checkpoint = torch.load(path)
-    clf.model.load_state_dict(checkpoint['model_state_dict'])
+    clf.model.load_state_dict(checkpoint['model_state_dict'], strict=False)
     clf.tokenizer = checkpoint['tokenizer']
     print(f'Model loaded from {path}')
     return clf
@@ -72,7 +74,7 @@ def build_dataloaders(args, data, config):
         X_train, X_test, y_train, y_test = train_test_split(X, y)
         train_loader = x_y_to_dataloader(X_train, y_train, config)
         test_loader = x_y_to_dataloader(X_test, y_test, config)
-        return train_loader, test_loader
+        return train_loader, test_loader, len(df_from_args['gender'].unique())
     else:
         df_from_train_args = build_dataset_from_args(args.train, data)
         df_from_test_args = build_dataset_from_args(args.test, data)
@@ -80,7 +82,7 @@ def build_dataloaders(args, data, config):
         X_test, y_test = get_x_y_from(df_from_test_args)
         train_loader = x_y_to_dataloader(X_train, y_train, config)
         train_loader = x_y_to_dataloader(X_test, y_test, config)
-    return train_loader, test_loader
+    return train_loader, test_loader, len(df_from_train_args['gender'].unique())
     
 def x_y_to_dataloader(X, y, config):
     """ helper function
@@ -88,9 +90,23 @@ def x_y_to_dataloader(X, y, config):
     ds = NounDataset(X, y, config['tokenizer'], config['max_length'])
     return DataLoader(ds, batch_size=config['batch_size'], shuffle=False)
 
-def save_model(model, path,):
+def save_model(clf, path,):
         torch.save({
-            'model_state_dict': model.state_dict(),
-            'tokenizer': model.tokenizer,
+            'model_state_dict': clf.model.state_dict(),
+            'tokenizer': clf.tokenizer,
         }, path)
         print(f'Model saved as {path}')
+
+def save_metadata(results, model_, args):
+    meta = {
+        'model': model_,
+        'trained_on': args.train,
+        'evaluated_on': args.evaluate,
+        'accuracy': results
+    }
+    folder_path = '../results'
+    file_name = f"{model_}_trained_on_{args.train}_evaluated_on {args.evaluate}.json"
+    full_name =  Path(folder_path) / file_name
+    with open(full_name, 'w') as f:
+        json.dump(meta, f)
+    print(f"metadata was successfully saved as {full_name}")

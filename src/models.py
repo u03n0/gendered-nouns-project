@@ -243,11 +243,11 @@ class GenderedCNN(nn.Module):
 
 # BERT 
 class GenderBert(nn.Module):
-    def __init__(self, **kwargs):
+    def __init__(self, num_labels=2):
         super(GenderBert, self).__init__()
 
         self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        self.model = BertForSequenceClassification.from_pretrained('bert-base-uncased', num_labels=kwargs.get("epochs"))
+        self.model = BertForSequenceClassification.from_pretrained('bert-base-uncased', num_labels=num_labels)
 
     def train_model(self, train_loader, device, num_epochs=3):
         self.model.to(device) 
@@ -293,4 +293,16 @@ class GenderBert(nn.Module):
         accuracy = correct / total
         print(f'{mode.capitalize()} Accuracy: {accuracy * 100:.2f}%')
         return accuracy
+    
+    def save_model(self, path):
+        torch.save({
+            'model_state_dict': self.model.state_dict(),
+            'tokenizer': self.tokenizer,
+        }, path)
+        print(f'Model saved to {path}')
 
+    def load_model(self, path):
+        checkpoint = torch.load(path)
+        self.model.load_state_dict(checkpoint['model_state_dict'])
+        self.tokenizer = checkpoint['tokenizer']
+        print(f'Model loaded from {path}')
