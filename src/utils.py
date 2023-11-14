@@ -77,11 +77,11 @@ def build_dataloaders(args, data, config):
         return train_loader, test_loader, len(df_from_args['gender'].unique())
     else:
         df_from_train_args = build_dataset_from_args(args.train, data)
-        df_from_test_args = build_dataset_from_args(args.test, data)
+        df_from_test_args = build_dataset_from_args(args.evaluate, data)
         X_train, y_train = get_x_y_from(df_from_train_args)
         X_test, y_test = get_x_y_from(df_from_test_args)
         train_loader = x_y_to_dataloader(X_train, y_train, config)
-        train_loader = x_y_to_dataloader(X_test, y_test, config)
+        test_loader = x_y_to_dataloader(X_test, y_test, config)
     return train_loader, test_loader, len(df_from_train_args['gender'].unique())
     
 def x_y_to_dataloader(X, y, config):
