@@ -17,6 +17,7 @@ uvicorn = "*"
 requests = "*"
 matplotlib = "*"
 torchvision = "*"
+argparse = "*"
 
 [dev-packages]
 ipykernel = "*"

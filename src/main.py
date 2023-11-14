@@ -1,91 +1,47 @@
 import torch
-import numpy as np
-from torch.utils.data import  DataLoader, SubsetRandomSampler
-from models import LanguageDataset, GenderedLSTM, GenderedCNN
-import matplotlib.pyplot as plt
-from torchvision import transforms
-from PIL import Image
+import argparse
 
-# Check if you have a GPU: 
-print(torch.cuda.is_available())
+import pandas as pd
+
+
+import utils
+from hyperparameters_dev import HYPERPARAMETERS
+from model_setup import CONFIGURATION
+
 
 if __name__ == "__main__":
-    with open("french_clean.txt") as f:
-        text = f.readlines()
 
-    # Hyperparameters for LSTM model
-    lstm_vocab_size = 70
-    lstm_window_size = 10
-    lstm_embedding_dim = 2
-    lstm_hidden_dim = 16
-    lstm_dense_dim = 32
-    lstm_n_layers = 1
-    lstm_max_norm = 2
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'  # Use GPU if available
 
-    # Hyperparameters for CNN model
-    cnn_vocab_size = 70
-    cnn_embedding_dim = 2
-    cnn_num_filters = 100
-    cnn_filter_sizes = [3, 4, 5] 
-    cnn_output_dim = 1  # Binary classification
-    cnn_dropout = 0.5
+    parser = argparse.ArgumentParser() # Argument Parser
+    parser.add_argument('-t', '--train', help='Specify which languages to train on : es, fr, de, etc', nargs='+', type=str, required=True, action='store')
+    parser.add_argument('-e', '--evaluate', help='Specify which languages to evaluate on : es, fr, de, etc', nargs='+', type=str, required=True, action='store')
+    parser.add_argument('-m', '--model', help='Specify which model to use : cnn, bert, etc', nargs='+', type=str, required=True, action='store')
 
-    # Training config
-    train_val_split = 0.8
-    batch_size = 128
-    random_state = 13
+    args = parser.parse_args()
 
-    torch.manual_seed(random_state)
+    df = pd.read_csv("../data/wiktionary_raw.csv")
+    valid_args = utils.verify_args_are_valid(args, df)
 
-    # Creating datasets
-    dataset = LanguageDataset(text)
-    n_samples = len(dataset)
-    split_idx = int(n_samples * train_val_split)
-    
-    n_epochs = dataset.longest_noun    
+    if valid_args:
+        data = utils.clean_data(df)
+        for model_ in args.model:
+            config = CONFIGURATION[model_] 
+            hyperparams = HYPERPARAMETERS[model_]
+            train_loader, test_loader, num_labels = utils.build_dataloaders(args, data, config)
+            pretrained_model_path = utils.get_pretrained_file(args.train, model_)
 
-    train_indices, val_indices = np.arange(split_idx), np.arange(split_idx, n_samples)
+            if pretrained_model_path.exists():
+                clf = utils.initialize_classifier(model_, num_labels)
+                clf.load_model(pretrained_model_path)
+            else:
+                print(f"{model_} model will be trained on {args.train} which has {num_labels} genders, using {device}")
+                clf = utils.initialize_classifier(model_, num_labels)
+                clf.train_model(train_loader, device=device, num_epochs=hyperparams['epochs'])
+                clf.save_model(pretrained_model_path)
 
-    train_dataloader = DataLoader(
-                dataset, sampler=SubsetRandomSampler(train_indices), batch_size=batch_size
-        )
-    val_dataloader = DataLoader(
-                dataset, sampler=SubsetRandomSampler(val_indices), batch_size=batch_size
-    )
-
-    # Creating and training LSTM model
-    # lstm_model = GenderedLSTM(train_dataloader, lstm_embedding_dim, lstm_hidden_dim, lstm_vocab_size, 2)
-    # lstm_model.train(train_dataloader, val_dataloader, 20, batch_size, device='cuda')
-
-    # Creating and training CNN model
-    cnn_model = GenderedCNN(cnn_vocab_size, cnn_embedding_dim, cnn_num_filters, cnn_filter_sizes, cnn_output_dim, cnn_dropout)
-    cnn_model.train_cnn(train_dataloader, val_dataloader, 20, batch_size, device='cpu', binary=True) # Two genders for French
-   
-    # TDODO: Never used a gradCAM before. Should be figured out:
-    # Apply Grad-CAM to a sample text
-    sample_text = "your_sample_text_here"  # Replace with your actual sample text
-    sample_input = dataset.__getitem__(0)  # Assuming you want to visualize the first sample in the dataset
-    sample_input_text = sample_input[0]  # Assuming the input is a text (modify if necessary)
-
-    # Convert the sample text to a tensor
-    transform = transforms.Compose([transforms.ToTensor()])
-    sample_input_tensor = transform(sample_input_text)
-
-    # Obtain Grad-CAM
-    gradcam = cnn_model.get_gradcam(sample_input_tensor.unsqueeze(0), target_class=0)  # Assuming binary classification
-
-    # Display the original input and Grad-CAM side by side
-    plt.figure(figsize=(10, 5))
-
-    # Original input
-    plt.subplot(1, 2, 1)
-    plt.title('Original Input')
-    plt.imshow(transforms.ToPILImage()(sample_input_tensor.squeeze()))
-
-    # Grad-CAM
-    plt.subplot(1, 2, 2)
-    plt.title('Grad-CAM')
-    plt.imshow(gradcam.squeeze(), cmap='jet', alpha=0.5)
-    plt.imshow(transforms.ToPILImage()(sample_input_tensor.squeeze()), alpha=0.5)
-
-    plt.show()
+            print(f"Testing {model_} model on {args.evaluate} using {device}")
+            results = clf.evaluate(test_loader, device=device)
+            utils.save_metadata(results, model_, args)
+    else:
+        print(f"Invalid arguments: please select from {utils.possible_options(df)}")

@@ -1,5 +1,3 @@
-from collections import defaultdict
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -7,6 +5,7 @@ import torch.optim as optim
 from torch.utils.data import Dataset
 from sklearn.preprocessing import LabelEncoder
 
+from transformers import BertTokenizer, BertForSequenceClassification
 
 
 class LanguageDataset(Dataset):
@@ -240,33 +239,27 @@ class GenderedCNN(nn.Module):
         gradcam = (gradcam - gradcam.min()) / (gradcam.max() - gradcam.min())
 
         return gradcam.squeeze()
+
+
 # BERT 
 class GenderBert(nn.Module):
-    def __init__(self, embedding_dim, hidden_dim, vocab_size, tagset_size, epochs, model, device='cuda'):
+    def __init__(self, num_labels=2):
         super(GenderBert, self).__init__()
-        self.embedding_dim = embedding_dim
-        self.hidden_dim = hidden_dim
-        self.vocab_size = vocab_size
-        self.tagset_size = tagset_size
-        self.epochs = epochs
-        self.device = device
-        self.model = model
 
-        
+        self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+        self.model = BertForSequenceClassification.from_pretrained('bert-base-uncased', num_labels=num_labels)
 
-    def train(self, train_loader, save_model=True):
-        
-        # Define the optimizer and loss function
+    def train_model(self, train_loader, device, num_epochs=3):
+        self.model.to(device) 
+        self.model.train()
         optimizer = torch.optim.Adam(self.model.parameters(), lr=1e-5)
         criterion = torch.nn.CrossEntropyLoss()
 
-        num_epochs = self.epochs
-        self.model.to(self.device)
         for epoch in range(num_epochs):
             for batch in train_loader:
-                input_ids = batch['input_ids'].to(self.device)
-                attention_mask = batch['attention_mask'].to(self.device)
-                labels = batch['label'].squeeze().long().to(self.device)  # Ensure labels are of type long
+                input_ids = batch['input_ids'].to(device)
+                attention_mask = batch['attention_mask'].to(device)
+                labels = batch['label'].squeeze().long().to(device)
                 optimizer.zero_grad()
 
                 outputs = self.model(input_ids, attention_mask=attention_mask)
@@ -277,26 +270,19 @@ class GenderBert(nn.Module):
                 optimizer.step()
 
             print(f'Epoch {epoch + 1}/{num_epochs}, Loss: {loss.item()}')
-        if save_model:
-            torch.save(self.model.state_dict(), 'saved_models/GenderBert_params.pt')
-            print(f"Successfully saved model")
 
-    def predict(self, test_loader):
-        # Evaluation
-        # self.model.eval()  # Set the model to evaluation mode
+    def evaluate(self, data_loader, device, mode='test'):
+        self.model.to(device)
+        self.model.eval()
         correct = 0
         total = 0
 
         with torch.no_grad():
-            for batch in test_loader:
-                input_ids = batch['input_ids'].to(self.device)
-                attention_mask = batch['attention_mask'].to(self.device)
-                labels = batch['label'].to(self.device)
+            for batch in data_loader:
+                input_ids = batch['input_ids'].to(device)
+                attention_mask = batch['attention_mask'].to(device)
+                labels = batch['label'].to(device)
 
-                # Move the model's parameters to the same device
-                self.model.to(self.device)
-
-                # Forward pass
                 outputs = self.model(input_ids, attention_mask=attention_mask)
                 logits = outputs.logits
                 _, predicted = torch.max(logits, 1)
@@ -305,6 +291,18 @@ class GenderBert(nn.Module):
                 correct += (predicted == labels).sum().item()
 
         accuracy = correct / total
-        print(f'Test Accuracy: {accuracy * 100:.2f}%')
+        print(f'{mode.capitalize()} Accuracy: {accuracy * 100:.2f}%')
         return accuracy
+    
+    def save_model(self, path):
+        torch.save({
+            'model_state_dict': self.model.state_dict(),
+            'tokenizer': self.tokenizer,
+        }, path)
+        print(f'Model saved to {path}')
 
+    def load_model(self, path):
+        checkpoint = torch.load(path)
+        self.model.load_state_dict(checkpoint['model_state_dict'])
+        self.tokenizer = checkpoint['tokenizer']
+        print(f'Model loaded from {path}')
