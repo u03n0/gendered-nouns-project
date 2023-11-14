@@ -23,7 +23,7 @@ def build_dataset_from_args(lang_list, df):
 def clean_data(df):
     df = df.drop_duplicates()
     df = df.dropna()
-    return df
+    return reduce(df)
 
 
 def get_x_y_from(df):
@@ -112,3 +112,20 @@ def save_metadata(results, model_, args):
     with open(full_name, 'w') as f:
         json.dump(meta, f)
     print(f"metadata was successfully saved as {full_name}")
+
+
+def distribution(df: pd.DataFrame)-> pd.DataFrame:
+    """
+    Groups values by gender and language, counts and gives a total for each
+    Ex:
+    """
+    return df.groupby(['gender','lang']).size().unstack()
+
+
+
+def reduce(df):
+    """ reduces all languages and genders by an equal amount
+    """
+    grouped = distribution(df) # get distribution of languages and gender
+    lowest_value = int(grouped.min().min()) # select lowest count
+    return df.groupby(['lang', 'gender'])[['noun', 'gender', 'lang']].sample(n=lowest_value) # reduce each language and gender by lowest_value
