@@ -1,0 +1,1 @@
+{"model": "bert", "trained_on": ["de", "pl"], "evaluated_on": ["de"], "accuracy": 0.3333333333333333}
