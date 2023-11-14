@@ -35,12 +35,12 @@ if __name__ == "__main__":
                 clf = utils.initialize_classifier(model_, num_labels)
                 clf.load_model(pretrained_model_path)
             else:
-                print(f"{model_} model will be trained on {args.train}")
+                print(f"{model_} model will be trained on {args.train} which has {num_labels} genders, using {device}")
                 clf = utils.initialize_classifier(model_, num_labels)
                 clf.train_model(train_loader, device=device, num_epochs=hyperparams['epochs'])
                 clf.save_model(pretrained_model_path)
 
-            print(f"Testing {model_} model on {args.evaluate}")
+            print(f"Testing {model_} model on {args.evaluate} using {device}")
             results = clf.evaluate(test_loader, device=device)
             utils.save_metadata(results, model_, args)
     else:

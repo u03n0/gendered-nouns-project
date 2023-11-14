@@ -67,6 +67,7 @@ def load_pretrained_model(model_name, path):
     print(f'Model loaded from {path}')
     return clf
 
+
 def build_dataloaders(args, data, config):
     if args.train == args.evaluate:
         df_from_args = build_dataset_from_args(args.train, data)
@@ -84,13 +85,14 @@ def build_dataloaders(args, data, config):
         test_loader = x_y_to_dataloader(X_test, y_test, config)
     return train_loader, test_loader, len(df_from_train_args['gender'].unique())
     
+
 def x_y_to_dataloader(X, y, config):
     """ helper function
     """
     ds = NounDataset(X, y, config['tokenizer'], config['max_length'])
     return DataLoader(ds, batch_size=config['batch_size'], shuffle=False)
 
-def save_model(clf, path,):
+def save_model(clf, path):
         torch.save({
             'model_state_dict': clf.model.state_dict(),
             'tokenizer': clf.tokenizer,
@@ -105,7 +107,7 @@ def save_metadata(results, model_, args):
         'accuracy': results
     }
     folder_path = '../results'
-    file_name = f"{model_}_trained_on_{args.train}_evaluated_on {args.evaluate}.json"
+    file_name = f"{model_}_trained_on_{args.train}_evaluated_on{args.evaluate}.json"
     full_name =  Path(folder_path) / file_name
     with open(full_name, 'w') as f:
         json.dump(meta, f)
