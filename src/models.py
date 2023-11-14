@@ -239,6 +239,8 @@ class GenderedCNN(nn.Module):
         gradcam = (gradcam - gradcam.min()) / (gradcam.max() - gradcam.min())
 
         return gradcam.squeeze()
+
+
 # BERT 
 class GenderBert(nn.Module):
     def __init__(self, **kwargs):
