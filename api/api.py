@@ -4,7 +4,7 @@ from pathlib import Path
 import torch
 from torch.utils.data import DataLoader
 from transformers import BertTokenizer, BertForSequenceClassification
-from src.models import GenderBert, NounDataset
+from src.models import Bert, NounDataset
 
 app = FastAPI()
 
