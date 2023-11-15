@@ -62,9 +62,10 @@ class NounDataset(Dataset):
             max_length=self.max_length,
             return_tensors='pt'
         )
+        attention_mask = encoded_text['attention_mask'].to(torch.int)
         return  {
         'input_ids': encoded_text['input_ids'].squeeze(),
-        'attention_mask': encoded_text['attention_mask'].squeeze(),
+        'attention_mask': attention_mask.squeeze(),
         'label': label
     }
 
@@ -241,27 +242,25 @@ class GenderedCNN(nn.Module):
         return gradcam.squeeze()
 
 
-# BERT 
-class GenderBert(nn.Module):
+class Bert(nn.Module):
     def __init__(self, num_labels=2):
-        super(GenderBert, self).__init__()
+        super(Bert, self).__init__()
 
         self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
         self.model = BertForSequenceClassification.from_pretrained('bert-base-uncased', num_labels=num_labels)
 
-    def train_model(self, train_loader, device, num_epochs=3,  max_grad_norm=1.0):
+    def train_model(self, train_loader, device, num_epochs=3):
         self.model.to(device) 
         self.model.train()
         optimizer = torch.optim.Adam(self.model.parameters(), lr=1e-5)
         criterion = torch.nn.CrossEntropyLoss()
 
-        scheduler = ReduceLROnPlateau(optimizer, 'min', patience=2, factor=0.5, verbose=True)
-
         for epoch in range(num_epochs):
             for batch in train_loader:
                 input_ids = batch['input_ids'].to(device)
                 attention_mask = batch['attention_mask'].to(device)
-                labels = batch['label'].squeeze().long().to(device)
+                labels = batch['label'].to(device)
+
                 optimizer.zero_grad()
 
                 outputs = self.model(input_ids, attention_mask=attention_mask)
@@ -269,16 +268,7 @@ class GenderBert(nn.Module):
 
                 loss = criterion(logits, labels)
                 loss.backward()
-
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_grad_norm)
-
                 optimizer.step()
-
-            # # Evaluate on a validation set or use a relevant metric
-            # validation_loss = self.evaluate(validation_loader, device, mode='validation')
-
-            # # Adjust learning rate based on validation loss
-            # scheduler.step(validation_loss)
 
             print(f'Epoch {epoch + 1}/{num_epochs}, Loss: {loss.item()}')
 

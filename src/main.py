@@ -3,14 +3,16 @@ import argparse
 
 import pandas as pd
 
+from sklearn.model_selection import train_test_split
+from torch.utils.data import  DataLoader
 
-import utils
-from hyperparameters_dev import HYPERPARAMETERS
-from model_setup import CONFIGURATION
+from utils import (verify_args_are_valid, build_lang_df, get_pretrained_file, possible_options,
+                   process_data, save_metadata, get_x_y_from, build_dataloader)
 
+from models import Bert
 
 if __name__ == "__main__":
-
+    
     device = 'cuda' if torch.cuda.is_available() else 'cpu'  # Use GPU if available
 
     parser = argparse.ArgumentParser() # Argument Parser
@@ -20,28 +22,39 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    df = pd.read_csv("../data/wiktionary_raw.csv")
-    valid_args = utils.verify_args_are_valid(args, df)
+    df = pd.read_csv("data/wiktionary_raw.csv")
+    valid_args = verify_args_are_valid(args, df)
 
     if valid_args:
-        data = utils.clean_data(df)
+        data = process_data(df)
         for model_ in args.model:
-            config = CONFIGURATION[model_] 
-            hyperparams = HYPERPARAMETERS[model_]
-            train_loader, test_loader, num_labels = utils.build_dataloaders(args, data, config)
-            pretrained_model_path = utils.get_pretrained_file(args.train, model_)
+            df_train_lang = build_lang_df(args.train, data)
+            df_test_lang = build_lang_df(args.evaluate, data)
+            num_labels = len(df_train_lang['gender'].unique())
+            pretrained_model_path = get_pretrained_file(args.train, model_)
+            model_class = globals()[model_]
+            clf = model_class(num_labels)
 
             if pretrained_model_path.exists():
-                clf = utils.initialize_classifier(model_, num_labels)
                 clf.load_model(pretrained_model_path)
+                X, y = get_x_y_from(df_test_lang)
+                test_loader = build_dataloader(X, y, 32, 34, clf)
             else:
                 print(f"{model_} model will be trained on {args.train} which has {num_labels} genders, using {device}")
-                clf = utils.initialize_classifier(model_, num_labels)
-                clf.train_model(train_loader, device=device, num_epochs=hyperparams['epochs'])
-                clf.save_model(pretrained_model_path)
+                if args.train == args.evaluate:
+                    X, y = get_x_y_from(df_train_lang)
+                    X_train, X_test, y_train, y_test = train_test_split(X, y) 
+                else:
+                    X_train, y_train = get_x_y_from(df_train_lang)
+                    X_test, y_test = get_x_y_from(df_test_lang)
+                train_loader = build_dataloader(X_train, y_train, 32, 34, clf)
+                test_loader = build_dataloader(X_test, y_test, 32, 34, clf)
 
+                clf.train_model(train_loader, device=device, num_epochs=8)
+                clf.save_model(pretrained_model_path)
+            
             print(f"Testing {model_} model on {args.evaluate} using {device}")
             results = clf.evaluate(test_loader, device=device)
-            utils.save_metadata(results, model_, args)
+            save_metadata(results, model_, args)
     else:
-        print(f"Invalid arguments: please select from {utils.possible_options(df)}")
+        print(f"Invalid arguments: please select from {possible_options(df)}")
