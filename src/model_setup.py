@@ -8,10 +8,10 @@ CONFIGURATION = {
         'model_name': 'bert-base-uncased',
         'tokenizer': BertTokenizer.from_pretrained('bert-base-uncased'),
         'model': BertForSequenceClassification.from_pretrained('bert-base-uncased'),
-        'max_length': 32,
+        'max_length': 40,
         'batch_size': 32,
         'custom_model':GenderBert,
-        'epochs': 5
+        'epochs': 10
     },
 
     'cnn': {

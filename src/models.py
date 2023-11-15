@@ -4,7 +4,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.data import Dataset
 from sklearn.preprocessing import LabelEncoder
-
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 from transformers import BertTokenizer, BertForSequenceClassification
 
 
@@ -249,11 +249,13 @@ class GenderBert(nn.Module):
         self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
         self.model = BertForSequenceClassification.from_pretrained('bert-base-uncased', num_labels=num_labels)
 
-    def train_model(self, train_loader, device, num_epochs=3):
+    def train_model(self, train_loader, device, num_epochs=3,  max_grad_norm=1.0):
         self.model.to(device) 
         self.model.train()
         optimizer = torch.optim.Adam(self.model.parameters(), lr=1e-5)
         criterion = torch.nn.CrossEntropyLoss()
+
+        scheduler = ReduceLROnPlateau(optimizer, 'min', patience=2, factor=0.5, verbose=True)
 
         for epoch in range(num_epochs):
             for batch in train_loader:
@@ -267,7 +269,16 @@ class GenderBert(nn.Module):
 
                 loss = criterion(logits, labels)
                 loss.backward()
+
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_grad_norm)
+
                 optimizer.step()
+
+            # # Evaluate on a validation set or use a relevant metric
+            # validation_loss = self.evaluate(validation_loader, device, mode='validation')
+
+            # # Adjust learning rate based on validation loss
+            # scheduler.step(validation_loss)
 
             print(f'Epoch {epoch + 1}/{num_epochs}, Loss: {loss.item()}')
 
