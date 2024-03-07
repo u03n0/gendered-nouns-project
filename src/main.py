@@ -4,11 +4,9 @@ import argparse
 import pandas as pd
 
 from sklearn.model_selection import train_test_split
-from torch.utils.data import  DataLoader
 
 from utils import (verify_args_are_valid, build_lang_df, get_pretrained_file, possible_options,
                    process_data, save_metadata, get_x_y_from, build_dataloader)
-
 from models import Bert
 
 if __name__ == "__main__":
